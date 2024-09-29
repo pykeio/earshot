@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "Ridiculously fast voice activity detection in pure #[no_std] Rust"
 repository = "https://github.com/pykeio/earshot"
 authors = [ "Carson M <carson@pyke.io>" ]
-license = "BSD-3-CLAUSE"
+license = "BSD-3-Clause"
 edition = "2021"
-exclude = ["tests/data"]
+exclude = ["tests/data", ".github"]
 
 [features]
 default = [ "std", "alloc" ]
