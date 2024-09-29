@@ -1,0 +1,28 @@
+[package]
+name = "earshot"
+version = "0.1.0"
+description = "Ridiculously fast voice activity detection in pure #[no_std] Rust"
+repository = "https://github.com/pykeio/earshot"
+authors = [ "Carson M <carson@pyke.io>" ]
+license = "BSD-3-CLAUSE"
+edition = "2021"
+exclude = ["tests/data"]
+
+[features]
+default = [ "std", "alloc" ]
+# Currently just impls `std::error::Error` for the `Error` type.
+std = []
+# Allocates internal buffers on the heap instead of the stack.
+alloc = []
+
+[dependencies]
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "downsample"
+harness = false
+[[bench]]
+name = "vad"
+harness = false

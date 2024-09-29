@@ -1,0 +1,39 @@
+name: Run cargo tests
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - '.github/workflows/test.yml'
+      - 'src/**/*.rs'
+      - 'Cargo.toml'
+      - 'tests/**/*'
+  pull_request:
+    paths:
+      - '.github/workflows/test.yml'
+      - 'src/**/*.rs'
+      - 'Cargo.toml'
+      - 'tests/**/*'
+jobs:
+  test:
+    name: Run tests
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os: ubuntu-latest
+          - os: windows-latest
+          - os: macos-12
+          - os: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v1
+      - name: Run tests
+        run: |
+          cargo test --verbose
