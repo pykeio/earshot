@@ -1,5 +1,5 @@
 use crate::{
-	energy::{energy, EnergyResult},
+	energy::{EnergyResult, energy},
 	util::norm_u32
 };
 
@@ -243,7 +243,7 @@ pub fn calculate_features(
 
 #[cfg(test)]
 mod tests {
-	use super::{calculate_features, FEATURES_OFFSET_VECTOR};
+	use super::{FEATURES_OFFSET_VECTOR, calculate_features};
 
 	#[test]
 	fn test_calculate_features_reference() {

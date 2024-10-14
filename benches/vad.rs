@@ -1,6 +1,6 @@
 use std::{fs, hint::black_box, slice};
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use earshot::{VoiceActivityDetector, VoiceActivityModel, VoiceActivityProfile};
 
 fn bench_vad_8khz(c: &mut Criterion) {

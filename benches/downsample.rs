@@ -1,6 +1,6 @@
 use std::{fs, slice};
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use earshot::__internal_downsampling::downsample_2x;
 
 fn downsample_48khz_24khz(c: &mut Criterion) {

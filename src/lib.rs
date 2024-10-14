@@ -34,8 +34,7 @@ pub(crate) mod util;
 
 #[doc(hidden)]
 pub mod __internal_downsampling {
-	pub use crate::resample::resample_48khz_to_8khz;
-	pub use crate::sp::downsample_2x;
+	pub use crate::{resample::resample_48khz_to_8khz, sp::downsample_2x};
 }
 
 use self::{
