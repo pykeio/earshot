@@ -1,47 +1,89 @@
-#[inline]
-pub fn div_i32_i16(a: i32, b: i16) -> i32 {
-	a.checked_div(b as i32).unwrap_or(i32::MAX)
+use core::{
+	cell::UnsafeCell,
+	hint::spin_loop,
+	marker::PhantomData,
+	mem::{MaybeUninit, forget},
+	sync::atomic::{AtomicU8, Ordering}
+};
+
+pub(crate) struct OnceLock<T> {
+	data: UnsafeCell<MaybeUninit<T>>,
+	status: AtomicU8,
+	phantom: PhantomData<T>
 }
 
-#[inline]
-pub fn size_in_bits(n: i32) -> u8 {
-	32 - n.leading_zeros() as u8
-}
+unsafe impl<T: Send> Send for OnceLock<T> {}
+unsafe impl<T: Send + Sync> Sync for OnceLock<T> {}
 
-/// Return the number of steps `a` can be left-shifted without overflow, or `0` if `a == 0`.
-#[inline]
-pub fn norm_i32(a: i32) -> i8 {
-	if a != 0 {
-		(if a < 0 { !a } else { a }).leading_zeros() as i8 - 1 // sub 1 for the sign bit
-	} else {
-		0
+const STATUS_UNINITIALIZED: u8 = 0;
+const STATUS_RUNNING: u8 = 1;
+const STATUS_INITIALIZED: u8 = 2;
+
+impl<T> OnceLock<T> {
+	pub const fn new() -> Self {
+		Self {
+			data: UnsafeCell::new(MaybeUninit::uninit()),
+			status: AtomicU8::new(STATUS_UNINITIALIZED),
+			phantom: PhantomData
+		}
 	}
-}
 
-/// Return the number of steps `a` can be left-shifted without overflow, or `0` if `a == 0`.
-#[inline]
-pub fn norm_u32(a: u32) -> u8 {
-	if a != 0 { a.leading_zeros() as u8 } else { 0 }
-}
-
-pub fn weighted_average(data: &mut [[i16; 6]], channel: usize, offset: i16, weights: &[[i16; 6]]) -> i32 {
-	let mut weighted_average = 0;
-	for gaussian in 0..data.len() {
-		data[gaussian][channel] += offset;
-		weighted_average += data[gaussian][channel] as i32 * weights[gaussian][channel] as i32;
+	#[inline]
+	unsafe fn get_unchecked(&self) -> &T {
+		&*(*self.data.get()).as_ptr()
 	}
-	weighted_average
-}
 
-#[cfg(test)]
-mod tests {
-	use crate::util::{norm_u32, size_in_bits};
+	#[inline]
+	pub fn get(&self) -> Option<&T> {
+		match self.status.load(Ordering::Acquire) {
+			STATUS_INITIALIZED => Some(unsafe { self.get_unchecked() }),
+			_ => None
+		}
+	}
 
-	#[test]
-	fn test_norm() {
-		assert_eq!(17, size_in_bits(111121));
-		assert_eq!(0, norm_u32(0));
-		assert_eq!(0, norm_u32(u32::MAX));
-		assert_eq!(15, norm_u32(111121));
+	#[inline]
+	pub fn get_or_init<F: FnOnce() -> T>(&self, f: F) -> &T {
+		if let Some(value) = self.get() { value } else { self.init_inner(f) }
+	}
+
+	#[cold]
+	fn init_inner<F: FnOnce() -> T>(&self, f: F) -> &T {
+		'a: loop {
+			match self
+				.status
+				.compare_exchange(STATUS_UNINITIALIZED, STATUS_RUNNING, Ordering::Acquire, Ordering::Acquire)
+			{
+				Ok(_) => {
+					struct SetStatusOnPanic<'a> {
+						status: &'a AtomicU8
+					}
+					impl Drop for SetStatusOnPanic<'_> {
+						fn drop(&mut self) {
+							self.status.store(STATUS_UNINITIALIZED, Ordering::SeqCst);
+						}
+					}
+
+					let panic_catcher = SetStatusOnPanic { status: &self.status };
+					let val = f();
+					unsafe {
+						(*self.data.get()).as_mut_ptr().write(val);
+					};
+					forget(panic_catcher);
+
+					self.status.store(STATUS_INITIALIZED, Ordering::Release);
+
+					return unsafe { self.get_unchecked() };
+				}
+				Err(STATUS_INITIALIZED) => return unsafe { self.get_unchecked() },
+				Err(STATUS_RUNNING) => loop {
+					match self.status.load(Ordering::Acquire) {
+						STATUS_RUNNING => spin_loop(),
+						STATUS_INITIALIZED => return unsafe { self.get_unchecked() },
+						_ => continue 'a
+					}
+				},
+				_ => continue
+			}
+		}
 	}
 }

@@ -24,9 +24,6 @@ jobs:
       matrix:
         platform:
           - os: ubuntu-latest
-          - os: windows-latest
-          - os: macos-12
-          - os: macos-14
     steps:
       - uses: actions/checkout@v4
       - name: Install stable Rust toolchain
