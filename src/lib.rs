@@ -63,13 +63,13 @@ struct Filters {
 
 impl Filters {
 	pub fn new() -> Self {
-		let low_mel = 2595. * (1.0f32 + 0.0 / 700.).log10();
-		let high_mel = 2595. * (1.0f32 + 8000. / 700.).log10();
+		let low_mel = 2595. * libm::log10f(1.0f32 + 0.0 / 700.);
+		let high_mel = 2595. * libm::log10f(1.0f32 + 8000. / 700.);
 
 		let mut bin_points = [0; 42];
 		for i in 0..N_MELS + 2 {
 			let mel = i as f32 * (high_mel - low_mel) / (N_MELS as f32 + 1.0) + low_mel;
-			let hz = 700.0 * (f32::powf(10., mel / 2595.) - 1.);
+			let hz = 700.0 * (libm::exp10f(mel / 2595.) - 1.);
 			bin_points[i] = ((FFT_SIZE as f32 + 1.) * hz / 16000.) as usize;
 		}
 
@@ -88,7 +88,8 @@ impl Filters {
 		let mut window = vec![0.0; WINDOW_SIZE].into_boxed_slice();
 		let df = f32::consts::PI / WINDOW_SIZE as f32;
 		for i in 0..WINDOW_SIZE {
-			window[i] = (df * i as f32).sin().powi(2);
+			let x = libm::sinf(df * i as f32);
+			window[i] = x * x;
 		}
 
 		Self { mel_coeffs, window }
@@ -226,7 +227,7 @@ impl<P: Predictor> Detector<P> {
 				per_band_value += self.buffer[j] * filters.mel_coeffs[(i * N_BINS) + j];
 			}
 
-			per_band_value = (per_band_value + 1e-20).ln();
+			per_band_value = libm::logf(per_band_value + 1e-20);
 			cur_frame_features[i] = (per_band_value - FEATURE_MEANS[i]) / FEATURE_STDS[i];
 		}
 

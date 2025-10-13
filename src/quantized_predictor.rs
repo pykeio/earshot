@@ -139,13 +139,13 @@ impl ActivationTables {
 		let mut sigmoid_table = vec![0; sigmoid_len as usize].into_boxed_slice();
 		for i in 0..sigmoid_len {
 			let v = Self::_real_sigmoid((i - (Self::SIGMOID_MAX)) as f32 / Self::Q11_SCALE_FLOAT);
-			sigmoid_table[i as usize] = (v * Self::OUT_SCALE).round_ties_even() as i32;
+			sigmoid_table[i as usize] = libm::roundevenf(v * Self::OUT_SCALE) as i32;
 		}
 		let tanh_len = Self::TANH_MAX * 2 + 1;
 		let mut tanh_table = vec![0; tanh_len as usize].into_boxed_slice();
 		for i in 0..tanh_len {
-			let v = ((i - (Self::TANH_MAX)) as f32 / Self::Q11_SCALE_FLOAT).tanh();
-			tanh_table[i as usize] = (v * Self::OUT_SCALE).round_ties_even() as i32;
+			let v = libm::tanhf((i - (Self::TANH_MAX)) as f32 / Self::Q11_SCALE_FLOAT);
+			tanh_table[i as usize] = libm::roundevenf(v * Self::OUT_SCALE) as i32;
 		}
 
 		Self {
@@ -156,7 +156,7 @@ impl ActivationTables {
 
 	#[inline]
 	fn _real_sigmoid(x: f32) -> f32 {
-		1. / (1. + (-x).exp())
+		1. / (1. + libm::expf(-x))
 	}
 
 	#[inline]
@@ -273,7 +273,7 @@ fn input_layer1(features: &[f32], kernel: &[i16], weight: &[i16], bias: &[i16], 
 	for i in 0..FEATURES_INPUT {
 		unsafe {
 			// convert to Q16
-			*tmp.get_unchecked_mut(i) = (*features.get_unchecked(i) * SCALE_FACTOR).floor() as i32;
+			*tmp.get_unchecked_mut(i) = libm::floorf(*features.get_unchecked(i) * SCALE_FACTOR) as i32;
 		};
 	}
 
@@ -288,7 +288,7 @@ fn input_layer1(features: &[f32], kernel: &[i16], weight: &[i16], bias: &[i16], 
 					let input_idx = (kh * NUM_FEATURES) + w;
 					unsafe {
 						// Q16 * Q13 = Q29
-						sum += *tmp.get_unchecked(input_idx) as i32 * *kernel.get_unchecked((kh * KERNEL_SIZE) + kw) as i32;
+						sum += *tmp.get_unchecked(input_idx) as i64 * *kernel.get_unchecked((kh * KERNEL_SIZE) + kw) as i64;
 					}
 				}
 			}
@@ -296,7 +296,7 @@ fn input_layer1(features: &[f32], kernel: &[i16], weight: &[i16], bias: &[i16], 
 			// pointwise conv
 			unsafe {
 				// Q29 * Q13 = Q42. bias is Q12 so shift left by 42-12=30
-				let x = (sum as i64 * *weight.get_unchecked(c) as i64) + ((*bias.get_unchecked(c) as i64) << 30);
+				let x = (sum * *weight.get_unchecked(c) as i64) + ((*bias.get_unchecked(c) as i64) << 30);
 				// shift down to Q16
 				*row.get_unchecked_mut(ox) = (x >> 26) as i32;
 			}
@@ -338,7 +338,7 @@ fn input_layer2(features: &[i32], kernel: &[i16], weight: &[i16], bias: &[i16], 
 
 				// Q16 * Q13 = Q29
 				unsafe {
-					sum += *features.get_unchecked((c * IN_FEATURES) + ix as usize) as i32 * *kernel.get_unchecked((c * HORIZONTAL_KERNEL_SIZE) + kw) as i32;
+					sum += *features.get_unchecked((c * IN_FEATURES) + ix as usize) as i64 * *kernel.get_unchecked((c * HORIZONTAL_KERNEL_SIZE) + kw) as i64;
 				}
 			}
 
@@ -346,7 +346,7 @@ fn input_layer2(features: &[i32], kernel: &[i16], weight: &[i16], bias: &[i16], 
 			for oc in 0..CHANNELS {
 				unsafe {
 					// Q29 * Q13 = Q42
-					let r = sum as i64 * *weight.get_unchecked((oc * CHANNELS) + c) as i64;
+					let r = sum * *weight.get_unchecked((oc * CHANNELS) + c) as i64;
 					*row.get_unchecked_mut(oc) += r;
 				}
 			}
