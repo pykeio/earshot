@@ -86,7 +86,7 @@ fn input_layer1(features: &[f32], output: &mut [f32]) {
 			for kw in 0..KERNEL_SIZE {
 				let w = ox + kw;
 				let input_idx = (kh * NUM_FEATURES) + w;
-				sum += unsafe { *features.get_unchecked(input_idx) } * unsafe { *LAYER1_KERNEL.get_unchecked((kh * KERNEL_SIZE) + kw) };
+				sum += features[input_idx] * LAYER1_KERNEL[(kh * KERNEL_SIZE) + kw];
 			}
 		}
 
@@ -97,14 +97,14 @@ fn input_layer1(features: &[f32], output: &mut [f32]) {
 		let mut new_row = [0.0; DEPTHWISE_NUM_FEATURES];
 		for ox in 0..DEPTHWISE_NUM_FEATURES {
 			// pointwise conv
-			new_row[ox] = (row[ox] * unsafe { *LAYER1_WEIGHT.get_unchecked(c) }) + unsafe { *LAYER1_BIAS.get_unchecked(c) };
+			new_row[ox] = (row[ox] * LAYER1_WEIGHT[c]) + LAYER1_BIAS[c];
 		}
 
 		// max pool over row
 		let out_row_offs = POOLED_COLS * c;
 		for q in 0..POOLED_COLS {
 			for x in 0..POOL_KERNEL_SIZE {
-				let out_q = unsafe { output.get_unchecked_mut(out_row_offs + q) };
+				let out_q = &mut output[out_row_offs + q];
 				// `out` is zeroed, so this also acts as ReLU
 				*out_q = (*out_q).max(new_row[(q * POOL_STRIDE) + x]);
 			}
@@ -150,10 +150,8 @@ fn input_layer2_3<const IN_FEATURES: usize, const OUT_FEATURES: usize, const LAY
 				ic += sum * weight[(oc * CHANNELS) + c];
 			}
 
-			unsafe {
-				let ptr = if !LAYER3 { &mut output[(oc * OUT_FEATURES) + ox] } else { &mut output[(ox * CHANNELS) + oc] };
-				*ptr = (ic + *bias.get_unchecked(oc)).max(0.0);
-			}
+			let ptr = if !LAYER3 { &mut output[(oc * OUT_FEATURES) + ox] } else { &mut output[(ox * CHANNELS) + oc] };
+			*ptr = (ic + bias[oc]).max(0.0);
 		}
 	}
 }
@@ -165,16 +163,16 @@ fn mingru<const IN_DIM: usize>(features: &[f32], h: &[f32], weight: &[f32], out:
 		let ri = d * IN_DIM;
 
 		for f in 0..IN_DIM {
-			o += unsafe { *features.get_unchecked(f) } * unsafe { *weight.get_unchecked(ri + f) };
+			o += features[f] * weight[ri + f];
 		}
 
-		unsafe { *out.get_unchecked_mut(d) = o };
+		out[d] = o;
 	}
 
 	for i in 0..64 {
-		let g = (unsafe { *out.get_unchecked(64 + i) } * 0.25).clamp(0.0, 1.0);
-		let v = unsafe { out.get_unchecked_mut(i) };
-		*v = (1. - g) * unsafe { *h.get_unchecked(i) } + g * *v;
+		let g = (out[64 + i] * 0.25).clamp(0.0, 1.0);
+		let v = &mut out[i];
+		*v = (1. - g) * h[i] + g * *v;
 	}
 }
 
