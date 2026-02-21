@@ -5,6 +5,8 @@ Achieves an RTF of 0.0007 (1,270x real time): **20x faster** than Silero VAD v6 
 
 > If you find Earshot useful, please consider [sponsoring pyke.io](https://opencollective.com/pyke-osai).
 
+<img src="https://i.pyke.io/earshot-1.0-pr.png"/>
+
 ## Usage
 
 ```rs
