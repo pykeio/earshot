@@ -172,7 +172,7 @@ fn mingru<const IN_DIM: usize>(features: &[f32], h: &[f32], weight: &[f32], out:
 	}
 
 	for i in 0..64 {
-		let g = (unsafe { *out.get_unchecked(64 + i) } / 4.).clamp(0.0, 1.0);
+		let g = (unsafe { *out.get_unchecked(64 + i) } * 0.25).clamp(0.0, 1.0);
 		let v = unsafe { out.get_unchecked_mut(i) };
 		*v = (1. - g) * unsafe { *h.get_unchecked(i) } + g * *v;
 	}
