@@ -1,19 +1,17 @@
 [package]
 name = "earshot"
-version = "0.1.0"
+version = "1.0.0"
 description = "Ridiculously fast & accurate voice activity detection in pure Rust"
 repository = "https://github.com/pykeio/earshot"
 authors = [ "Carson M <carson@pyke.io>" ]
 license = "MIT"
 edition = "2021"
-exclude = ["tests/data", ".github"]
+exclude = ["tests/data", "benches/", "examples/", ".github"]
 
 [features]
-default = [ "std", "embed-weights" ]
+default = [ "std" ]
 # Currently just impls `std::error::Error` for the `Error` type.
 std = []
-# Embed the default model weights in the binary. Enables `Default` for `QuantizedPredictor`.
-embed-weights = []
 
 [dependencies]
 libm = "0.2"

@@ -1,10 +1,10 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use earshot::{Detector, QuantizedPredictor};
+use earshot::Detector;
 
 fn bench_vad(c: &mut Criterion) {
-	let mut vad = Detector::<QuantizedPredictor>::default();
+	let mut vad = Detector::default();
 	c.bench_function("Single frame - f32", |b| {
 		let frame = (0..256 as i16).map(|i| i.wrapping_mul(i) as f32).collect::<Vec<_>>();
 		b.iter(|| {
