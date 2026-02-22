@@ -4,9 +4,10 @@ version = "1.0.0"
 description = "Ridiculously fast & accurate voice activity detection in pure Rust"
 repository = "https://github.com/pykeio/earshot"
 authors = [ "Carson M <carson@pyke.io>" ]
-license = "MIT"
-edition = "2021"
+license = "MIT OR Apache-2.0"
+edition = "2024"
 exclude = ["tests/data", "benches/", "examples/", ".github"]
+rust-version = "1.87"
 
 [features]
 default = [ "std" ]

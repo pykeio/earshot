@@ -30,7 +30,7 @@ impl<T> OnceLock<T> {
 
 	#[inline]
 	unsafe fn get_unchecked(&self) -> &T {
-		&*(*self.data.get()).as_ptr()
+		unsafe { &*(*self.data.get()).as_ptr() }
 	}
 
 	#[inline]
