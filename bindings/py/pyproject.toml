@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "earshot"
+version = "1.2.0"
+description = "Ridiculously fast & accurate voice activity detection"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+requires-python = ">=3.8"
+authors = [{ name = "Carson M", email = "carson@pyke.io" }]
+keywords = ["vad", "voice-activity-detection", "audio", "speech"]
+classifiers = [
+	"Programming Language :: Rust",
+	"Topic :: Multimedia :: Sound/Audio :: Analysis",
+	"Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+[project.urls]
+Repository = "https://github.com/pykeio/earshot"
+Documentation = "https://github.com/pykeio/earshot/tree/main/bindings/py"
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+module-name = "earshot._earshot"
+python-source = "python"
+features = ["pyo3/extension-module"]

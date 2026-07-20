@@ -1,0 +1,48 @@
+name: Test Python bindings
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - '.github/workflows/test-python.yml'
+      - 'src/**/*.rs'
+      - 'bindings/py/**'
+      - 'Cargo.toml'
+  pull_request:
+    paths:
+      - '.github/workflows/test-python.yml'
+      - 'src/**/*.rs'
+      - 'bindings/py/**'
+      - 'Cargo.toml'
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os: ubuntu-latest
+          - os: windows-latest
+          - os: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bindings/py
+      - name: Test
+        working-directory: bindings/py
+        shell: bash
+        run: |
+          python -m venv .venv
+          if [ -f .venv/bin/activate ]; then source .venv/bin/activate; else source .venv/Scripts/activate; fi
+          pip install maturin
+          maturin develop --release
+          python -c "
+          from earshot import Detector
+          d = Detector()
+          score = d.predict_i16([0] * 256)
+          assert 0.0 <= score <= 1.0
+          "
