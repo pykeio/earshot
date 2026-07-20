@@ -1,5 +1,7 @@
 from typing import Sequence
 
+import numpy
+
 __version__: str
 
 class Detector:
@@ -15,7 +17,7 @@ class Detector:
 		"""
 		...
 
-	def predict_i16(self, frame: Sequence[int]) -> float:
+	def predict_i16(self, frame: Sequence[int] | 'numpy.ndarray') -> float:
 		"""
 		Predicts the voice activity score of a single input frame of 16-bit PCM audio.
 
@@ -28,7 +30,7 @@ class Detector:
 		"""
 		...
 
-	def predict_f32(self, frame: Sequence[float]) -> float:
+	def predict_f32(self, frame: Sequence[float] | 'numpy.ndarray') -> float:
 		"""
 		Predicts the voice activity score of a single input frame of 32-bit floating-point PCM audio.
 

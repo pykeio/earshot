@@ -16,6 +16,7 @@ classifiers = [
 	"Topic :: Multimedia :: Sound/Audio :: Analysis",
 	"Topic :: Scientific/Engineering :: Artificial Intelligence"
 ]
+dependencies = ["numpy"]
 
 [project.urls]
 Repository = "https://github.com/pykeio/earshot"
