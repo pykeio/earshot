@@ -1,10 +1,16 @@
 #[cfg(feature = "libm")]
-pub use libm;
+pub mod libm {
+	pub use ::libm::*;
+
+	pub fn rsqrtf(f: f32) -> f32 {
+		1.0 / sqrtf(f)
+	}
+}
 #[cfg(not(feature = "libm"))]
 pub mod libm {
 	#[inline(always)]
-	pub fn sqrtf(f: f32) -> f32 {
-		f.sqrt()
+	pub fn rsqrtf(f: f32) -> f32 {
+		f.sqrt().recip()
 	}
 	#[inline(always)]
 	pub fn logf(f: f32) -> f32 {
