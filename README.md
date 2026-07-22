@@ -1,13 +1,24 @@
 # Earshot
-Ridiculously fast & accurate voice activity detection in pure Rust.
+Ridiculously fast & accurate streaming voice activity detection, written in pure Rust and also available for [Python](https://pypi.org/project/earshot/).
 
-Achieves an RTF of 0.0003 (3,600x real time): **40x faster** than Silero VAD v6 & TEN VAD - and more accurate, too!
+Earshot achieves an RTF of 0.0003 (3,600x real time): **40x faster** than Silero VAD v6 & TEN VAD - and more accurate, too!
+
+Earshot operates on 16 millisecond frames of mono audio sampled at 16000 Hz & supports streaming. Earshot detects voice in any language and is resilient to most kinds of environmental noise with an SNR ≤ 3dB.
 
 > If you find Earshot useful, please consider [sponsoring pyke.io](https://opencollective.com/pyke-osai).
 
-<img src="https://i.pyke.io/earshot-1.0-pr.png"/>
+<figure>
+<img src="https://i.pyke.io/earshot-acc-1.3.png"/>
+<figcaption><i>
+Earshot, in black, performs markedly better than Silero VAD v6 and TEN VAD in blue and red.
+</i></figcaption>
+</figure>
 
 ## Usage
+- **Python**: [`pip install earshot`](https://pypi.org/project/earshot/)
+
+### Rust
+> [`cargo add earshot`](https://crates.io/crates/earshot)
 
 ```rs
 use earshot::Detector;
