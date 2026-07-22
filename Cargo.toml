@@ -5,7 +5,7 @@ members = [
 
 [package]
 name = "earshot"
-version = "1.2.0"
+version = "1.2.1"
 description = "Ridiculously fast & accurate voice activity detection in pure Rust"
 repository = "https://github.com/pykeio/earshot"
 authors = [ "Carson M <carson@pyke.io>" ]
