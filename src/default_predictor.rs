@@ -213,7 +213,7 @@ fn mingru<const IN_DIM: usize>(features: &[i16], h: &mut [i16], weight: &[i16], 
 		// gate is multiplied by 4 then clamped within [0, 1] in Q24
 		let g = (temp[64 + i] << 2).clamp(0, 16777215) as i64;
 		let y = (16777215 - g) * ((h[i] as i64) << 9) as i64 + g * temp[i] as i64; // Q24 * Q24 = Q48
-		h[i] = (y >> 33) as i16; // back down to Q15
+		h[i] = (y >> 33).clamp(-32768, 32767) as i16; // back down to Q15
 	}
 }
 
