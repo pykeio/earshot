@@ -84,9 +84,9 @@ pub(crate) trait CFft {
 	fn bit_reverse_reorder(x: &mut [Complex32]) {
 		debug_assert_eq!(x.len(), Self::N);
 
-		for i in 0..Self::N {
+		for i in 1..Self::N {
 			let j = Self::BITREV_TABLE[i] as usize;
-			if i != j {
+			if j > i {
 				x.swap(i, j);
 			}
 		}
