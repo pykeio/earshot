@@ -20,4 +20,8 @@ pub mod libm {
 	pub fn expf(f: f32) -> f32 {
 		f.exp()
 	}
+	#[inline(always)]
+	pub fn roundf(f: f32) -> f32 {
+		f.round()
+	}
 }

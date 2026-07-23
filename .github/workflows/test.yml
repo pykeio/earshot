@@ -17,20 +17,27 @@ on:
       - 'tests/**/*'
 jobs:
   test:
-    name: Run tests
-    runs-on: ${{ matrix.platform.os }}
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - os: ubuntu-latest
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v5
       - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
       - uses: Swatinem/rust-cache@v2
       - name: Run tests
-        run: |
-          cargo test --verbose
+        run: cargo test --verbose
+
+  no-std:
+    name: check (no_std + libm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo check --verbose --no-default-features --features libm
