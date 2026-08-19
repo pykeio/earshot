@@ -192,7 +192,7 @@ fn input_layer3(features: &[f32], output: &mut [i16]) {
 			}
 
 			// note: transposed, no ReLU or bias
-			output[(ox * CHANNELS) + oc] = (ic * 32768.0).round().clamp(-32768.0, 32767.0) as i16;
+			output[(ox * CHANNELS) + oc] = libm::roundf(ic * 32768.0).clamp(-32768.0, 32767.0) as i16;
 		}
 	}
 }
