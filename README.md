@@ -3,7 +3,7 @@ Ridiculously fast & accurate streaming voice activity detection, written in pure
 
 Earshot achieves an RTF of 0.0003 (3,600x real time): **40x faster** than Silero VAD v6 & TEN VAD - and more accurate, too!
 
-Earshot operates on 16 millisecond frames of mono audio sampled at 16000 Hz & supports streaming. Earshot detects voice in any language and is resilient to most kinds of environmental noise with an SNR ≥ 3dB.
+Earshot operates on 16 millisecond frames of mono/stereo audio sampled at 16000 Hz & supports streaming. Earshot detects voice in any language and is resilient to most kinds of environmental noise with an SNR ≥ 3dB.
 
 > If you find Earshot useful, please consider [sponsoring pyke.io](https://opencollective.com/pyke-osai).
 
@@ -21,21 +21,30 @@ Earshot, in black, performs markedly better than Silero VAD v6 and TEN VAD in bl
 > [`cargo add earshot`](https://crates.io/crates/earshot)
 
 ```rs
-use earshot::Detector;
-
-// Create a new VAD detector using the default NN.
-let mut detector = Detector::default();
-
+// Get per-frame probabilities from a real-time audio stream:
+let mut detector = earshot::Detector::default();
 let mut frame_receiver = ...
 while let Some(frame) = frame_receiver.recv() {
 	// `frame` is Vec<i16> with length 256.
 	// Each frame passed to the detector must be exactly 256 samples (16ms) @ 16 KHz sample rate.
-	// f32 [-1, 1] frames are also supported with `predict_f32`.
-	let score = detector.predict_i16(&frame);
-	// Score is between 0-1; 0 = no voice, 1 = voice.
-	if score >= 0.5 { // 0.5 is a good default threshold, but can be customized.
-		println!("Voice detected!");
+	// f32 [-1, 1] slices/vecs are also supported here.
+	let score = detector.predict(&frame);
+	if score.is_voice() {
+		println!("Voice detected! Score: {:.1}%", score.raw * 100.);
 	}
+
+	// If the frame is interleaved stereo, use the Stereo wrapper:
+	let score = detector.predict(earshot::Stereo(&frame));
+}
+
+// Get segments from a full audio buffer:
+for segment in earshot::segments(audio, &earshot::SegmenterOptions::default()) {
+	println!(
+		"Voice detected from {:.2}s - {:.2}s ({:.2}s)",
+		segment.start_secs(),
+		segment.end_secs(),
+		segment.duration_secs()
+	);
 }
 ```
 

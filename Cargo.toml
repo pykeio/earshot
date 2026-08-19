@@ -30,6 +30,9 @@ hound = "3.5"
 rubato = "0.16"
 itertools = "0.14"
 
+[package.metadata.docs.rs]
+rustdoc-args = [ "--cfg", "docsrs" ]
+
 [[bench]]
 name = "vad"
 harness = false

@@ -42,7 +42,7 @@ impl VadWriter {
 				self.input_chunk[i] = x;
 			}
 
-			if self.detector.predict_f32(&self.input_chunk) >= 0.5 {
+			if self.detector.predict(&self.input_chunk).is_voice() {
 				for sample in self.input_chunk.iter().copied() {
 					self.output.write_sample(sample)?;
 				}

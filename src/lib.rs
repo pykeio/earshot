@@ -1,3 +1,51 @@
+//! Earshot is a ridiculously fast & accurate [voice activity detector](https://en.wikipedia.org/wiki/Voice_activity_detection).
+//!
+//! Earshot operates on 16 millisecond frames of mono audio sampled at 16,000 Hz & supports streaming. Earshot detects
+//! voice in any language and is resilient to most kinds of environmental noise with an SNR ≥ 3dB.
+//!
+//! ## Streaming usage
+//! ```
+//! use earshot::Detector;
+//! # fn get_frame_receiver() -> impl Iterator<Item = &'static [f32]> { core::iter::once([0.0f32; earshot::FRAME_SIZE].as_ref()) }
+//!
+//! let mut detector = Detector::default();
+//!
+//! // Get a stream of frames from a microphone or the network or something
+//! let mut frame_receiver = get_frame_receiver();
+//!
+//! while let Some(frame) = frame_receiver.next() {
+//! 	// Frames must be exactly `earshot::FRAME_SIZE` in length (256 samples/16ms).
+//! 	// They can be given as slices of either i16 or f32.
+//! 	// Mono audio is expected by default. You can wrap frames in `earshot::Stereo(frame)` to use interleaved stereo audio.
+//!
+//! 	let score = detector.predict(frame);
+//! 	if score.is_voice() {
+//! 		println!("Voice detected! Confidence: {:.1}%", score.raw * 100.);
+//! 	}
+//! }
+//! ```
+//!
+//! ## Segmentation
+//! [`segments`] returns all speech segments in a complete audio buffer, like Silero VAD's `get_speech_timestamps`.
+//! Unlike [`Detector`], which only gives you raw per-frame scores, `segments` includes smoothing, minimum segment
+//! duration, etc.
+//!
+//! ```
+//! use earshot::{SegmenterOptions, segments};
+//!
+//! # let file = std::fs::read("testdata/1.wav").unwrap();
+//! # let audio = unsafe { std::slice::from_raw_parts(file.as_ptr().add(44).cast::<i16>(), file.len() / 2) };
+//! #
+//! for segment in segments(audio, &SegmenterOptions::default()) {
+//! 	println!(
+//! 		"Voice detected from {:.2}s - {:.2}s ({:.2}s)",
+//! 		segment.start_secs(),
+//! 		segment.end_secs(),
+//! 		segment.duration_secs()
+//! 	);
+//! }
+//! ```
+
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -7,15 +55,21 @@ compile_error!("earshot's `libm` feature must be enabled when the `std` feature 
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-use core::{f32, ptr};
+use core::{cmp::Ordering, f32, ptr};
 
 mod default_predictor;
 mod fft;
 mod filters;
+mod frame;
+mod segments;
 mod util;
 
-pub use self::default_predictor::DefaultPredictor;
 use self::util::libm;
+pub use self::{
+	default_predictor::DefaultPredictor,
+	frame::{FRAME_SIZE, Frame, Stereo},
+	segments::{ExactChunks, IntoFrames, Segment, SegmenterOptions, segments, segments_with_predictor}
+};
 
 /// Used by [`Detector`] to predict the VAD score of a frame based on extracted features.
 ///
@@ -32,26 +86,28 @@ pub trait Predictor {
 	fn predict(&mut self, features: &[f32], buffer: &mut [f32]) -> f32;
 }
 
+pub const SAMPLE_RATE: usize = 16_000;
 const FFT_SIZE: usize = 1024;
-const WINDOW_SIZE: usize = 768;
+const CONTEXT_FRAMES: usize = 3;
+const WINDOW_SIZE: usize = FRAME_SIZE * CONTEXT_FRAMES;
 const N_MELS: usize = 40;
 const N_FEATURES: usize = N_MELS;
-const N_CONTEXT_FRAMES: usize = 3;
 const N_BINS: usize = FFT_SIZE / 2 + 1;
 const PRE_EMPHASIS_COEFF: f32 = 0.97;
 const POWER_FAC: f32 = 1. / (32768.0f32 * 32768.0);
 
-/// A voice activity detector. Create one per separate audio stream.
+/// A streaming voice activity detector. Create one per separate audio stream.
 ///
 /// # Stack size
 /// `Detector` is a fairly large object, as it allocates its state (about 8 KiB by default) on the stack. If stack space
-/// is a concern, use a `Box<Detector>` instead. (Maps or vectors of `Detector`s shouldn't need to worry about this).
+/// is a concern, create a `Box<Detector>` with [`Detector::default_boxed`]/[`Detector::new_boxed`] instead. (Maps or
+/// vectors of `Detector`s shouldn't need to worry about this).
 pub struct Detector<P = DefaultPredictor> {
 	predictor: P,
 	prev_signal: f32,
-	sample_ring_buffer: [f32; 768],
-	features: [f32; N_FEATURES * N_CONTEXT_FRAMES],
-	buffer: [f32; 1026]
+	sample_ring_buffer: [f32; WINDOW_SIZE],
+	features: [f32; N_FEATURES * CONTEXT_FRAMES],
+	buffer: [f32; FFT_SIZE + 2]
 }
 
 impl Default for Detector<DefaultPredictor> {
@@ -61,6 +117,7 @@ impl Default for Detector<DefaultPredictor> {
 }
 
 impl Detector<DefaultPredictor> {
+	#[inline]
 	pub const fn const_default() -> Detector<DefaultPredictor> {
 		Self::new(DefaultPredictor::new())
 	}
@@ -92,23 +149,24 @@ impl<P: Predictor> Detector<P> {
 	/// Creates a new `Detector` on the stack.
 	///
 	/// To create directly on the heap, see [`Detector::new_boxed`] instead.
+	#[inline]
 	pub const fn new(predictor: P) -> Self {
 		Self {
 			predictor,
 			prev_signal: 0.0,
-			sample_ring_buffer: [0.0; 768],
-			features: [0.0; N_FEATURES * N_CONTEXT_FRAMES],
-			buffer: [0.0; 1026]
+			sample_ring_buffer: [0.0; WINDOW_SIZE],
+			features: [0.0; N_FEATURES * CONTEXT_FRAMES],
+			buffer: [0.0; FFT_SIZE + 2]
 		}
 	}
 
-	/// Creates a new `Detector` directly on the heap, without ever allocating the large amount of stack space that
-	/// `Detector` normally uses.
+	/// Creates a new `Detector` directly on the heap.
 	///
-	/// This is preferred over `Box::new(Detector::new(predictor))`, since that creates the detector on the stack before
-	/// moving it to the heap.
+	/// This is more efficient than `Box::new(Detector::new(predictor))`, since that creates the detector on the stack
+	/// before moving it to the heap.
 	#[cfg(feature = "alloc")]
 	#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+	#[inline]
 	pub fn new_boxed(predictor: P) -> Box<Self> {
 		// TODO: use new_zeroed instead, MSRV 1.92
 		let mut boxed = alloc::boxed::Box::<Self>::new_uninit();
@@ -125,10 +183,7 @@ impl<P: Predictor> Detector<P> {
 	}
 
 	/// Resets the internal state of the voice activity detector.
-	///
-	/// The detector should be reset whenever:
-	/// - the recording device changes; or
-	/// - the detector is being used for a new audio sequence.
+	#[inline]
 	pub fn reset(&mut self) {
 		self.predictor.reset();
 		self.prev_signal = 0.0;
@@ -144,22 +199,11 @@ impl<P: Predictor> Detector<P> {
 	///
 	/// The output score is between `[0, 1]`. Scores over 0.5 can generally be considered voice, but the exact threshold
 	/// can be adjusted according to application-specific needs.
+	#[deprecated = "use Detector::predict instead"]
+	#[inline]
+	#[doc(hidden)]
 	pub fn predict_i16(&mut self, frame: &[i16]) -> f32 {
-		debug_assert_eq!(frame.len(), 256, "frame should be exactly 256 samples");
-		if frame.len() != 256 {
-			return -1.0;
-		}
-
-		unsafe {
-			ptr::copy(self.sample_ring_buffer.as_ptr().add(256), self.sample_ring_buffer.as_mut_ptr(), 512);
-		};
-		for (emph, sample) in (&mut self.sample_ring_buffer[512..]).iter_mut().zip(frame.iter()) {
-			let sample = *sample as f32;
-			*emph = sample - PRE_EMPHASIS_COEFF * self.prev_signal;
-			self.prev_signal = sample;
-		}
-
-		self.predict_inner()
+		self.predict(frame).raw
 	}
 
 	/// Predicts the voice activity score of a single input frame of 32-bit floating-point PCM audio.
@@ -171,29 +215,37 @@ impl<P: Predictor> Detector<P> {
 	///
 	/// The output score is between `[0, 1]`. Scores over 0.5 can generally be considered voice, but the exact threshold
 	/// can be adjusted according to application-specific needs.
+	#[deprecated = "use Detector::predict instead"]
+	#[inline]
+	#[doc(hidden)]
 	pub fn predict_f32(&mut self, frame: &[f32]) -> f32 {
-		debug_assert_eq!(frame.len(), 256, "frame should be exactly 256 samples");
-		if frame.len() != 256 {
-			return -1.0;
+		self.predict(frame).raw
+	}
+
+	/// Detect voice in a single frame of a 16 KHz PCM audio stream.
+	///
+	/// The frame must be exactly [`FRAME_SIZE`] samples in length (or `FRAME_SIZE * 2` if [`Stereo`] is used).
+	///
+	/// ```
+	/// let mut detector = earshot::Detector::default();
+	/// # let frame = [0.0_f32; earshot::FRAME_SIZE].as_ref();
+	/// if detector.predict(frame).is_voice() {
+	/// 	// ...
+	/// }
+	/// ```
+	pub fn predict<F: Frame>(&mut self, frame: F) -> Score {
+		debug_assert_eq!(frame.len(), FRAME_SIZE, "frame should be exactly {FRAME_SIZE} samples");
+		if frame.len() != FRAME_SIZE {
+			return Score { raw: 0.0 };
 		}
 
-		debug_assert!(
-			*frame
-				.iter()
-				.max_by(|x, y| x.abs().partial_cmp(&y.abs()).unwrap_or(core::cmp::Ordering::Equal))
-				.unwrap() <= 1.0,
-			"input frame should be in the range [-1, 1]"
-		);
-
-		/// We perform the FFT at i16 scale and scale down afterwards; doing the FFT at f32 scale ([-1, 1]) loses a lot
-		/// of precision.
-		const SCALE: f32 = 32768.0;
-
+		const OTHER_FRAMES: usize = WINDOW_SIZE - FRAME_SIZE;
 		unsafe {
-			ptr::copy(self.sample_ring_buffer.as_ptr().add(256), self.sample_ring_buffer.as_mut_ptr(), 512);
+			ptr::copy(self.sample_ring_buffer.as_ptr().add(FRAME_SIZE), self.sample_ring_buffer.as_mut_ptr(), OTHER_FRAMES);
 		};
-		for (emph, sample) in (&mut self.sample_ring_buffer[512..]).iter_mut().zip(frame.iter()) {
-			let sample = *sample * SCALE;
+		for (emph, sample) in (&mut self.sample_ring_buffer[OTHER_FRAMES..]).iter_mut().zip(frame.samples()) {
+			debug_assert!((-32768.0..=32768.0).contains(&sample), "encountered a bad sample (note f32 inputs must be within [-1, 1])");
+
 			*emph = sample - PRE_EMPHASIS_COEFF * self.prev_signal;
 			self.prev_signal = sample;
 		}
@@ -201,14 +253,14 @@ impl<P: Predictor> Detector<P> {
 		self.predict_inner()
 	}
 
-	fn predict_inner(&mut self) -> f32 {
+	fn predict_inner(&mut self) -> Score {
 		// windowize for FFT
 		for i in 0..WINDOW_SIZE {
 			self.buffer[i] = self.sample_ring_buffer[i] * filters::HANN_WINDOW[i];
 		}
 		// FFT size is 1024 but window size is 768, so fill the rest with zeros (+2 to store nyquist frequency)
 		unsafe {
-			ptr::write_bytes(self.buffer.as_mut_ptr().add(WINDOW_SIZE), 0, 256 + 2);
+			ptr::write_bytes(self.buffer.as_mut_ptr().add(WINDOW_SIZE), 0, const { (FFT_SIZE - WINDOW_SIZE) + 2 });
 		};
 
 		fft::rfft_1024(&mut self.buffer);
@@ -220,9 +272,9 @@ impl<P: Predictor> Detector<P> {
 		}
 
 		unsafe {
-			ptr::copy(self.features.as_ptr().add(N_FEATURES), self.features.as_mut_ptr(), N_FEATURES * (N_CONTEXT_FRAMES - 1));
+			ptr::copy(self.features.as_ptr().add(N_FEATURES), self.features.as_mut_ptr(), N_FEATURES * (CONTEXT_FRAMES - 1));
 		};
-		let cur_frame_features = &mut self.features[(N_FEATURES * (N_CONTEXT_FRAMES - 1))..];
+		let cur_frame_features = &mut self.features[(N_FEATURES * (CONTEXT_FRAMES - 1))..];
 		for i in 0..N_MELS {
 			let mut per_band_value = 0.;
 			let (start, coeffs) = filters::MEL_COEFFS[i];
@@ -234,6 +286,39 @@ impl<P: Predictor> Detector<P> {
 		}
 		self.predictor.normalize(cur_frame_features);
 
-		self.predictor.predict(&self.features, &mut self.buffer)
+		let score = self.predictor.predict(&self.features, &mut self.buffer);
+		Score::new(score)
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub struct Score {
+	/// The raw predicted score, in the range `[0, 1]`.
+	pub raw: f32
+}
+
+impl Score {
+	#[inline]
+	pub(crate) const fn new(raw: f32) -> Self {
+		Self { raw }
+	}
+
+	#[inline]
+	pub const fn is_voice(&self) -> bool {
+		self.raw >= 0.5
+	}
+
+	#[inline]
+	pub const fn is_silence(&self) -> bool {
+		self.raw < 0.5
+	}
+}
+
+// score will never be NaN or infinity so we can implement eq & ord
+impl Eq for Score {}
+impl Ord for Score {
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.raw.total_cmp(&other.raw)
 	}
 }
