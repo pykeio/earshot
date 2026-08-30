@@ -16,10 +16,6 @@ jobs:
           - { target: x86_64-unknown-linux-gnu, glibc: '2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
           - { target: aarch64-unknown-linux-gnu, glibc: '2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
           - { target: armv7-unknown-linux-gnueabihf, glibc: '2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
-          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
-          - { target: aarch64-unknown-linux-musl, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
-          - { target: armv7-unknown-linux-musleabihf, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
-          - { target: riscv64gc-unknown-linux-musl, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
           - { target: aarch64-apple-darwin, os: macos-latest, prefix: 'lib', suffix: '.dylib' }
           - { target: x86_64-pc-windows-msvc, os: windows-latest, prefix: '', suffix: '.dll' }
           - { target: aarch64-pc-windows-msvc, os: windows-11-arm, prefix: '', suffix: '.dll' }
@@ -38,6 +34,7 @@ jobs:
       - name: Build (cargo)
         run: cargo rustc --release --crate-type cdylib --target ${{ matrix.target }} --features __ffi
       - name: Build (zig)
+        if: matrix.zig
         run: cargo-zigbuild rustc --release --crate-type cdylib --target ${{ matrix.target }}${{ matrix.glibc || '' }} --features __ffi
       - name: Prepare for upload
         run: |
