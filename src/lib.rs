@@ -57,6 +57,8 @@ extern crate alloc;
 
 use core::{cmp::Ordering, f32, ptr};
 
+#[cfg(feature = "__ffi")]
+mod c;
 mod default_predictor;
 mod fft;
 mod filters;

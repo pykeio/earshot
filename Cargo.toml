@@ -21,6 +21,14 @@ std = [ "alloc" ]
 alloc = []
 libm = [ "dep:libm" ]
 
+__ffi = []
+
+[profile.release]
+opt-level = 3
+strip = true
+codegen-units = 1
+lto = "fat"
+
 [dependencies]
 libm = { version = "0.2", optional = true }
 

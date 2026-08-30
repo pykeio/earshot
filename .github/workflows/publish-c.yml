@@ -1,0 +1,76 @@
+name: Publish dylibs
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+env:
+  CARGO_INCREMENTAL: 0
+  MACOSX_DEPLOYMENT_TARGET: 10.7
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu.2.17, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: aarch64-unknown-linux-gnu.2.17, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: armv7-unknown-linux-gnueabihf.2.17, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: aarch64-unknown-linux-musl, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: armv7-unknown-linux-musleabihf, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: riscv64gc-unknown-linux-musl, zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: aarch64-apple-darwin, os: macos-latest, prefix: 'lib', suffix: '.dylib' }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest, prefix: '', suffix: '.dll' }
+          - { target: aarch64-pc-windows-msvc, os: windows-11-arm, prefix: '', suffix: '.dll' }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v2.2.1
+        if: matrix.zig
+      - name: Install cargo-zigbuild
+        if: matrix.zig
+        run: cargo install --locked cargo-zigbuild
+      - name: Build (cargo)
+        run: cargo rustc --release --crate-type cdylib --target ${{ matrix.target }} --features __ffi
+      - name: Build (zig)
+        run: cargo-zigbuild rustc --release --crate-type cdylib --target ${{ matrix.target }} --features __ffi
+      - name: Prepare for upload
+        run: |
+          mv target/${{ matrix.target }}/release/${{ matrix.prefix }}earshot${{ matrix.suffix }} ./${{ matrix.prefix }}earshot-${{ matrix.target }}${{ matrix.suffix }}
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ${{ matrix.prefix }}earshot-${{ matrix.target }}${{ matrix.suffix }}
+          archive: false
+  publish:
+    name: Publish
+    runs-on: ubuntu-slim
+    needs: [build]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Get release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Upload artifact to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.tag.outputs.tag }}" dist/* --clobber
