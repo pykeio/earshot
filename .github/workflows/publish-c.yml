@@ -13,9 +13,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: x86_64-unknown-linux-gnu, glibc: '2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
-          - { target: aarch64-unknown-linux-gnu, glibc: '2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
-          - { target: armv7-unknown-linux-gnueabihf, glibc: '2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: x86_64-unknown-linux-gnu, glibc: '.2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: aarch64-unknown-linux-gnu, glibc: '.2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
+          - { target: armv7-unknown-linux-gnueabihf, glibc: '.2.17', zig: true, os: ubuntu-latest, prefix: 'lib', suffix: '.so' }
           - { target: aarch64-apple-darwin, os: macos-latest, prefix: 'lib', suffix: '.dylib' }
           - { target: x86_64-pc-windows-msvc, os: windows-latest, prefix: '', suffix: '.dll' }
           - { target: aarch64-pc-windows-msvc, os: windows-11-arm, prefix: '', suffix: '.dll' }
