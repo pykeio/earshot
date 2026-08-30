@@ -32,6 +32,7 @@ jobs:
         if: matrix.zig
         run: cargo install --locked cargo-zigbuild
       - name: Build (cargo)
+        if: '!matrix.zig'
         run: cargo rustc --release --crate-type cdylib --target ${{ matrix.target }} --features __ffi
       - name: Build (zig)
         if: matrix.zig
